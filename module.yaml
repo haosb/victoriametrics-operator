@@ -1,0 +1,4 @@
+tags: ["test", "myTag"]
+weight: 960
+stage: "Sandbox"
+description: "my awesome module"
