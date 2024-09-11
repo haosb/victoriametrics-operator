@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vm-victoria-metrics-single-server
+  namespace: victoria-modules
+  {{- include "helm_lib_module_labels" (list . (dict "app" "victoriametrics")) | nindent 2 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      {{- include "victoriametrics.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "victoriametrics.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: true
+      containers:
+      - args:
+        - --retentionPeriod=1
+        - --storageDataPath=/storage
+        - --envflag.enable=true
+        - --envflag.prefix=VM_
+        - --loggerFormat=json
+        - --promscrape.config=/etc/prometheus/prometheus.yml
+        - --promscrape.configCheckInterval=15s
+        image: {{ include "helm_lib_module_image" (list . "victoriametrics") }}
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /health
+            port: 8428
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: victoria-metrics-single-server
+        ports:
+        - containerPort: 8428
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 5
+        volumeMounts:
+        - mountPath: /storage
+          name: server-volume
+        - mountPath: /etc/prometheus/
+          name: prometheus-config-volume
+      restartPolicy: Always
+      serviceAccountName: victoriametrics
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: prometheus-server-conf
+        name: prometheus-config-volume
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: server-volume
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 20Gi
+      volumeMode: Filesystem
